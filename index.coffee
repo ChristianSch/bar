@@ -6,28 +6,21 @@ bar =
   height: 23 # Text vertically aligns best with odd heights
 
   gap:
-    left: 20
-    right: 20
+    left: 8
+    right: 8
     top: 4
 
   font:
     color: "#fff"
 
   background:
-    color: "rgba(48, 48, 48, 1)"
+    color: "rgba(30, 30, 30, 0.8)"
 
   border:
     radius: 1
     color: "transparent"
 
   padding: "0 10px"
-
-# Order represents priority
-playing:
-  spotify: ""
-  youtube: ""
-  soundcloud: ""
-  sonos: ""
 
 # Time format
 time: "%l:%M:%S"
@@ -38,7 +31,7 @@ date: "%a %d %b"
 #############################################################################
 
 style: """
-  width: calc(#{bar.width} - #{bar.gap.left * 2 + bar.gap.right}px)
+  width: calc(#{bar.width} - #{bar.gap.left * 3 + bar.gap.right * 2}px)
   height: #{bar.height}px
   left: #{bar.gap.left}px
   top: #{bar.gap.top}px
@@ -50,11 +43,10 @@ style: """
   border-radius: #{bar.border.radius}px;
   border-color: #{bar.border.color}
 
-  -webkit-box-shadow: 0px 2px 5px 0 #000000
-  box-shadow: 0px 2px 5px 0 #000000
+  box-shadow: 0px 0px 20px #333333
 
-  font-size: 14px
-  font-family: 'Helvetica'
+  font-size: 13px
+  font-family: 'Helvetica Neue'
 
   div
     display: inline-block
@@ -64,6 +56,7 @@ style: """
   span
     vertical-align: middle
     line-height: normal
+    text-transform: lowercase;
 
   .left
     float: left
@@ -71,9 +64,6 @@ style: """
   .right
     float: right
     padding-left: 15px
-
-  .focused
-    color: #999
 
   .center
     position: absolute
@@ -85,16 +75,6 @@ style: """
     .icon
       padding: 0 3px
 
-    .fa-spotify
-      color: #2fd566
-
-    .fa-youtube, .fa-youtube-play
-      color: #e62117
-
-    .fa-soundcloud
-      color: #f50
-      font-size: 18px
-
   .battery
     .icon
       margin-left: 3px
@@ -104,6 +84,23 @@ style: """
   .icon
     font-size: 16px
 
+  .focused
+    margin-top: -2px
+
+    .icon
+      margin-left: 3px
+      
+  .blue
+    color: #3a81c3
+
+  .teal
+    color: #2aa1ae
+
+  .white
+    color: #ededed
+
+  .grey
+    color: #b3b9be
 """
 
 command: "#{process.argv[0]} bar/commands/update.js"
@@ -144,10 +141,41 @@ update: (output, el) ->
   @addTime(data.time, el)
   @addDate(data.date, el)
   @addBattery(data.battery, el)
-  @addPlaying(data, el)
+  @addPlaying(data.music, el)
 
-addFocused: (focused, el) ->
-  $(".focused span", el).text(focused)
+addFocused: (output, el) ->
+  values = output.split('@')
+  file = ""
+  screenhtml = ""
+  mode = values[0]
+  screens = values[1]
+  wins = values[2]
+  win = ""
+  i = 0
+
+  screensegs = screens.split('(')
+
+  for sseg in screensegs
+    screensegs[i] = sseg.replace /^\s+|\s+$/g, ""
+    i+=1
+
+  screensegs = (x for x in screensegs when x != '')
+
+  i = 0
+
+  #apply a proper number tag so that space change controls can be added
+  for sseg in screensegs
+    i += 1
+    # the active space has a closing paren aroound the name
+    if sseg.slice(-1) == ")"
+      screenhtml += "<span class='icon fa fa-circle'></span>"
+    else
+      screenhtml += "<span class='icon grey screen#{i} fa fa-circle'></span>"
+
+  $(".focused span", el).html("<span class='icon fa fa-terminal'></span>&nbsp;&nbsp;&nbsp;" +
+                              "<span class='white'>#{mode} " +
+							  "<span class='blue'> ⎢ </span></span>" +
+							  screenhtml)
 
 addDate: (date, el) ->
   $(".date span", el).text(date)
@@ -169,24 +197,14 @@ addPlaying: (music, el) ->
   $icon = $(".playing span.icon")
   $playing = $(".playing span:last-child", el)
 
-  playing = { track: "", source: "", icon: "" }
+  if music and music.playing
+      $icon.addClass("fa fa-play-circle")
+      $playing.text(music.track)
+  else
+      $icon.removeClass("fa-play-circle")
+      $playing.text("")
 
-  if music.spotify and music.spotify.playing
-    playing.track = music.spotify.track
-    playing.icon = @playingIcon(music.spotify.source)
-    playing.source = music.spotify.source
-  else if music.browser and music.browser.playing
-    playing.track = music.browser.track
-    playing.icon = @playingIcon(music.browser.source)
-    playing.source = music.browser.source
-
-  # Current source has changed
-  if @source != playing.source
-    $icon.removeClass().addClass("icon")
-    $icon.addClass("fa fa-#{playing.icon}")
-    $playing.text(playing.track)
-
-  @source = music.source
+  @source = "iTunes"
 
 batteryIcon: (percentage) =>
   return if percentage > 90
@@ -199,10 +217,3 @@ batteryIcon: (percentage) =>
     "fa-battery-quarter"
   else
     "fa-battery-empty"
-
-playingIcon: (source) =>
-  return switch source
-    when "youtube" then "youtube-play"
-    when "soundcloud" then "soundcloud"
-    when "spotify" then "spotify"
-    else ""

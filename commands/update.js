@@ -1,82 +1,76 @@
-
 var fs = require("fs"),
     cp = require('child_process'),
     Promise = require('node-promise').Promise,
     all = require("node-promise").all,
     strftime = require("strftime"),
-    batteryLevel = require('battery-level'),
-    spotify = require('spotify-node-applescript');
+    batteryLevel = require('battery-level');
 
 var getActiveWindow = function(){
-  var awPromise = new Promise();
-  var script = "osascript -e 'tell application \"System Events\"' -e 'set frontApp to name of first application process whose frontmost is true' -e 'end tell'"
-  cp.exec(script, function(err, stdout, stderr){
-    awPromise.resolve(stdout.replace("\n", ""));
-  });
-  return awPromise;
+    var awPromise = new Promise();
+    var script = "~/Library/Application\\ Support/Übersicht/widgets/bar/scripts/screens";
+
+    cp.exec(script, function(err, stdout, stderr){
+        awPromise.resolve(stdout.replace("\n", "") || stderr);
+    });
+
+    return awPromise;
 };
 
-// Check soundcloud file for currenty playing
-var browserPlaying = function(){
-  stat = fs.statSync("bar/playing/browser");
-  lastModified = new Date(stat.mtime);
-  data = fs.readFileSync("bar/playing/browser", "utf-8");
+var iTunesPlaying = function(){
+    var promise = new Promise();
+    var state = {
+        track: "",
+        playing: false,
+        source: "iTunes"
+    };
 
-  if(!!data && new Date().getTime() - lastModified.getTime() < 5000){
-    data = JSON.parse(data)
-  }
+    var playingCmd = "osascript -e 'tell application \"iTunes\"' -e 'set whatshappening to (get player state as string)' -e 'end tell'";
+    var songCmd = "osascript -e 'tell application \"iTunes\"' -e '(get name of current track) & \"\n\" & (get artist of current track)' -e 'end tell'";
 
-  return data;
+    cp.exec(playingCmd, function(err, stdout, stderr) {
+        if (err || stderr) {
+            return promise;
+        }
+
+        if (stdout == "playing\n") {
+            state.playing = true;
+
+            cp.exec(songCmd, function(err, stdout, stderr) {
+                var a = stdout.split('\n');
+
+                state.track = a[1].replace('\n', '') + ' - ' + a[0].replace('\n', '');
+
+                promise.resolve(state);
+            });
+        } else {
+            promise.resolve(state);
+        }
+    });
+
+    return promise;
 };
 
-var spotifyPlaying = function(){
-  var promise = new Promise();
-  var state = {
-    track: "",
-    playing: false,
-    source: "spotify"
-  };
-
-  spotify.getState(function(err, s){
-    if (!err && !!s){
-      state.playing = s.state == "playing";
-      if(state.playing){
-        spotify.getTrack(function(err, track){
-          if(!err && !!track && state.playing){
-            state.track = track.artist + ' - ' + track.name;
-          }
-          promise.resolve(state);
-        });
-      } else {
-        promise.resolve(state);
-      }
-    } else {
-      promise.resolve(state);
-    }
-  });
-
-  return promise;
-};
-
+// fill in static things without promises
 var playing = {
-  browser: browserPlaying(),
-  date: strftime("%a %d %b"),
-  time: strftime("%l:%M"),
-  active: getActiveWindow()
+    date: strftime("%a %d %b"),
+    time: strftime("%l:%M"),
+    active: "⌘"
 };
 
 var promises = [
-  // Update battery level
-  batteryLevel(),
-  spotifyPlaying(),
-  getActiveWindow(),
+    batteryLevel(),
+    iTunesPlaying(),
+    getActiveWindow()
 ];
 
-var p = all(promises)
-p.then(function(data){
-  playing.battery = data[0] * 100;
-  playing.spotify = data[1];
-  playing.active = data[2];
-  console.log(JSON.stringify(playing));
+// gather all info as all the functions have returned data
+var p = all(promises);
+
+p.then(function(data) {
+    playing.battery = data[0] * 100;
+    playing.music = data[1];
+    playing.active = data[2];
+
+    console.log(JSON.stringify(playing));
 });
 
